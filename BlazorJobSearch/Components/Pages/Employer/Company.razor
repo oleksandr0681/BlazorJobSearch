@@ -1,0 +1,87 @@
+﻿@page "/employer/employer"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Employer")]
+
+<PageTitle>Компанія</PageTitle>
+
+<h1>Компанія</h1>
+@if (Employer == null)
+{
+	<div>
+		<button class="btn btn-primary" title="Додати резюме." @onclick="NavigateAdd">
+			Додати
+		</button>
+	</div>
+}
+else
+{
+	<h3>@Employer.Name</h3>
+	<p>@Employer.Description</p>
+	<p>@Employer.History</p>
+	<p>@Employer.Settlement</p>
+	<p>@Employer.Address</p>
+	<p>@Employer.TelephoneNumber</p>
+	<p>@Employer.Email</p>
+	<br />
+	<button class="btn btn-primary" title="Змінити." @onclick="NavigateEdit">
+		Змінити
+	</button>
+	<span> &nbsp; </span>
+	<button class="btn btn-danger" title="Вилучити резюме." @onclick="NavigateDelete">
+		Вилучити
+	</button>
+	<br />
+}
+
+@code {
+	private Employer? Employer { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("Employer"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			{
+				Employer = await dbContext.Employers
+					.FirstOrDefaultAsync(e => e.ApplicationUserId == userId);
+			}
+		}
+	}
+
+	private void NavigateAdd()
+	{
+		navigationManager.NavigateTo("/employer/add");
+	}
+
+	private void NavigateEdit()
+	{
+		navigationManager.NavigateTo("/employer/edit/" + Employer!.Id);
+	}
+
+	private void NavigateDelete()
+	{
+		navigationManager.NavigateTo("/employer/delete/" + Employer!.Id);
+	}
+}

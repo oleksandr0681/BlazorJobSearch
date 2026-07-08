@@ -1,0 +1,122 @@
+﻿body {
+}
+
+h1, h2, h3, h4, h5, h6 {
+    text-align: center;
+}
+
+p {
+    padding: 5px 0;
+    text-align: justify;
+}
+
+.filterDiv {
+    margin: 10px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.filter {
+    padding: 5px;
+    width: 30%;
+}
+
+.searchDiv {
+    margin: 10px 0;
+    display: flex;
+    justify-content: center;
+}
+
+#jobSearch {
+    margin-right: 5px;
+    flex-grow: 1;
+}
+
+#portfolio, #vacancies {
+    padding: 10px 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.slideCard {
+    margin: 10px;
+    padding: 5px;
+    width: 30%;
+    height: 200px;
+}
+
+    .slideCard h4 {
+        height: 60px;
+        overflow: auto;
+    }
+
+.slideCard__image > img {
+    margin-bottom: 5px;
+    height: 130px;
+    width: 100%;
+    object-fit: contain;
+}
+
+.image {
+    width: 100%;
+}
+
+.vacancyCard {
+    margin: 10px;
+    padding: 5px;
+    width: 30%;
+    height: 200px;
+}
+
+    .vacancyCard h4 {
+        height: 60px;
+        overflow: auto;
+    }
+
+.vacancyCard__description > p {
+    margin-bottom: 5px;
+    height: 130px;
+    overflow: hidden;
+}
+
+.keyWord {
+    padding: 5px;
+    background-color: rgb(0, 0, 0, 0.1);
+    border-radius: 5px;
+}
+
+.jobApplicationCard, .messageCard {
+    margin: 20px 0;
+    padding: 5px;
+    overflow: auto;
+}
+
+.jobApplicationCard__candidate jobApplicationCard__Vacancy {
+    font-size: 1.5rem;
+    text-align: center;
+}
+
+.jobApplicationCard_new {
+    font-weight: bold;
+}
+
+.color {
+    background-color: #9988bb;
+    position: relative;
+}
+
+.relative {
+    position: relative;
+}
+
+.dot {
+    height: 10px;
+    width: 10px;
+    background-color: green;
+    border-radius: 50%;
+    display: inline-block;
+    position: absolute;
+    top: 0px;
+    right: 0px;
+}

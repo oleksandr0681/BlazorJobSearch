@@ -1,0 +1,167 @@
+﻿@page "/vacancy/job/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Employer")]
+
+<button class="btn btn-primary" title="Змінити." @onclick="NavigateJobs">
+	Вакансії
+</button>
+@if (Vacancy != null)
+{
+	<PageTitle>@Vacancy.Job</PageTitle>
+
+	<h1>@Vacancy.Job</h1>
+	@if (Employer != null)
+	{
+		<p>@Employer.Name</p>
+	}
+	<p>Галузь: @Vacancy.Sector</p>
+	<p>Зарплата: @Vacancy.Salary грн.</p>
+	<p>Місто: @Vacancy.Settlement</p>
+	<p>Адреса: @Vacancy.Address</p>
+	@if (EmploymentType != null)
+	{
+		<p>@EmploymentType.Name</p>
+	}
+	@if (WorkingCondition != null)
+	{
+		<p>@WorkingCondition.Name</p>
+	}
+	<h2>Опис вакансії</h2>
+	<p>@Vacancy.Description</p>
+	<h3>Вимоги до кандидата:</h3>
+	<p><md>@Vacancy.Requirements</md></p>
+	@if (KeyWords != null)
+	{
+		<p>
+			@foreach (string keyWord in KeyWords)
+			{
+				<span class="keyWord">@keyWord</span>
+				<span> &nbsp; </span>
+			}
+		</p>
+	}
+	@if (Vacancy.Created != null)
+	{
+		<p>
+			@Created.ToLongDateString()
+		</p>
+	}
+	<h4>Заявки на вакансію</h4>
+	
+	if (Vacancy.JobApplications != null)
+	{
+		<div>
+			@foreach (JobApplication jobApplication in Vacancy.JobApplications)
+			{
+				@if (jobApplication.Viewed == null)
+				{
+					<a href=@("/applications/jobrequest/"+jobApplication.Id)
+					   title="Нова заявка.">
+						<div class="jobApplicationCard jobApplicationCard_new shadow-lg">
+							<p class="jobApplicationCard__candidate jobApplicationCard__candidate_new">
+								@jobApplication.JobCandidate.FullName
+							</p>
+							<p>@jobApplication.JobCandidate.Job</p>
+							<p>@jobApplication.Created.ToString()</p>
+						</div>
+					</a>
+				}
+				else
+				{
+					<a href=@("/applications/jobrequest/"+jobApplication.Id)>
+						<div class="jobApplicationCard shadow-lg">
+							<p class="jobApplicationCard__candidate">
+								@jobApplication.JobCandidate.FullName
+							</p>
+							<p>@jobApplication.JobCandidate.Job</p>
+							<p>Створено @jobApplication.Created.ToString()</p>
+						</div>
+					</a>
+				}
+			}
+		</div>
+	}
+	<button class="btn btn-primary" title="Змінити." @onclick="NavigateEdit">
+		Змінити
+	</button>
+	<span> &nbsp; </span>
+	<button class="btn btn-danger" title="Вилучити резюме." @onclick="NavigateDelete">
+		Вилучити
+	</button>
+}
+
+<script src="/markdown-tag.js"></script>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	private Vacancy? Vacancy { get; set; }
+
+	private Employer? Employer { get; set; }
+
+	private WorkingCondition? WorkingCondition { get; set; }
+
+	private EmploymentType? EmploymentType { get; set; }
+
+	private string[]? KeyWords { get; set; }
+
+	private DateTime Created { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Vacancy = await dbContext.Vacancies.FindAsync(Id);
+			if (Vacancy != null)
+			{
+				Employer = await dbContext.Employers.FindAsync(Vacancy.EmployerId);
+				WorkingCondition = await dbContext.WorkConditions
+					.FindAsync(Vacancy.WorkingConditionId);
+				EmploymentType = await dbContext.EmploymentTypes
+					.FindAsync(Vacancy.EmploymentTypeId);
+				if (Vacancy.KeyWords != null)
+				{
+					KeyWords = Vacancy.KeyWords.Split(";");
+				}
+				if (Vacancy.Created != null)
+				{
+					Created = (DateTime)Vacancy.Created;
+				}
+				Vacancy.JobApplications = await dbContext.JobApplications.Include(j => j.JobCandidate)
+					.Where(j => j.VacancyId == Vacancy.Id).OrderByDescending(v => v.Created).ToListAsync();
+			}
+		}
+	}
+
+	private void NavigateJobs()
+	{
+		navigationManager.NavigateTo("/vacancy/jobs");
+	}
+
+	private void NavigateEdit()
+	{
+		navigationManager.NavigateTo("/vacancy/edit/" + Vacancy!.Id);
+	}
+
+	private void NavigateDelete()
+	{
+		navigationManager.NavigateTo("/vacancy/delete/" + Vacancy!.Id);
+	}
+}

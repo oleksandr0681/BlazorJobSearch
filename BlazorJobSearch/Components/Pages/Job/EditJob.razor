@@ -1,0 +1,190 @@
+﻿@page "/vacancy/edit/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Employer")]
+
+<PageTitle>Вакансія</PageTitle>
+
+<h1>Зміна вакансії</h1>
+
+@if (Input != null)
+{
+	<EditForm Model="Input" OnValidSubmit="Submit" FormName="EditVacancy">
+		<DataAnnotationsValidator />
+		<ValidationSummary class="text-danger" />
+		<input type="hidden" @bind-value="Input.Id" />
+		<input type="hidden" @bind-value="Input!.EmployerId" />
+		<div class="form-group">
+			<label for="sector" class="form-label">
+				Галузь
+			</label>
+			<InputText @bind-Value="Input.Sector" id="sector" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="job" class="form-label">
+				Посада
+			</label>
+			<InputText @bind-Value="Input.Job" id="job" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="salary" class="form-label">
+				Заробітна плата
+			</label>
+			<InputNumber @bind-Value="Input.Salary" id="salary" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="description" class="form-label">
+				Опис роботи
+			</label>
+			<InputTextArea @bind-Value="Input.Description" id="description" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="requirements" class="form-label">
+				Вимоги
+			</label>
+			<InputTextArea @bind-Value="Input.Requirements" id="requirements" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="keyWords" title="Ключові слова розділяються крапкою з комою (;)." class="form-label">
+				Ключові слова
+			</label>
+			<InputTextArea @bind-Value="Input.KeyWords" id="keyWords" placeholder="HTML; CSS; База даних; PHP" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="keyWords" class="form-label">
+				Умови праці
+			</label>
+			<InputSelect @bind-Value="Input.WorkingConditionId" class="form-control">
+				@foreach (WorkingCondition workingCondition in WorkingConditions)
+				{
+					<option checked="@(Input.WorkingConditionId)" value="@(workingCondition.Id)">
+						@workingCondition.Name
+					</option>
+				}
+			</InputSelect>
+		</div>
+		<div class="form-group">
+			<label for="settlement" class="form-label">
+				Населений пункт
+			</label>
+			<InputText @bind-Value="Input.Settlement" id="settlement" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="address" class="form-label">
+				Адреса
+			</label>
+			<InputText @bind-Value="Input.Address" id="address" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="keyWords" class="form-label">
+				Тип зайнятості
+			</label>
+			<InputSelect @bind-Value="Input.EmploymentTypeId" class="form-control">
+				@foreach (EmploymentType employmentType in EmploymentTypes)
+				{
+					<option checked="@(Input.WorkingConditionId)" value="@(employmentType.Id)">
+						@employmentType.Name
+					</option>
+				}
+			</InputSelect>
+		</div>
+		<div class="form-group">
+			<br />
+			<input type="submit" value="Змінити" class="btn btn-primary" />
+			<button type="reset" class="btn btn-secondary" @onclick="Navigate">Скасувати</button>
+			<br />
+		</div>
+	</EditForm>
+}
+
+<p>@Message</p>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromForm(FormName = "EditVacancy")]
+	private Vacancy? Input { get; set; }
+
+	private string? Message { get; set; }
+
+	private List<WorkingCondition> WorkingConditions = new List<WorkingCondition>();
+
+	private List<EmploymentType> EmploymentTypes = new List<EmploymentType>();
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Input = await dbContext.Vacancies.FindAsync(Id);
+			IEnumerable<WorkingCondition> workingConditions = dbContext.WorkConditions;
+			if (workingConditions != null)
+			{
+				WorkingConditions = workingConditions.ToList();
+			}
+			IEnumerable<EmploymentType> employmentTypes = dbContext.EmploymentTypes;
+			if (employmentTypes != null)
+			{
+				EmploymentTypes = employmentTypes.ToList();
+			}
+		}
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("Employer"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			{
+				Employer? employer = await dbContext.Employers
+					.FirstOrDefaultAsync(e => e.ApplicationUserId == userId);
+				if (employer != null && Input != null && Input.EmployerId != employer.Id)
+				{
+					Message = "У вас нема доступу до цього ресурсу.";
+					navigationManager.NavigateTo("/AccessDenied");
+				}
+				else
+				{
+					try
+					{
+						dbContext.Vacancies.Update(Input!);
+						await dbContext.SaveChangesAsync();
+					}
+					catch (Exception ex)
+					{
+						Message = ex.Message;
+					}
+				}
+			}
+			if (Message == "")
+			{
+				navigationManager.NavigateTo("/vacancy/jobs");
+			}
+		}
+	}
+
+	private void Navigate()
+	{
+		navigationManager.NavigateTo("/vacancy/jobs");
+	}
+}

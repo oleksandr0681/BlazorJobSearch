@@ -1,0 +1,106 @@
+﻿@page "/portfolio/delete/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Портфоліо</PageTitle>
+
+<h1>Вилучення картинки</h1>
+
+@if (Model != null)
+{
+	<h3>Ви впевнені, що хочете вилучити @Model.Name ?</h3>
+	<br />
+	<EditForm Model="Model" OnValidSubmit="Submit" FormName="DeletePicture">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+		<input type="hidden" @bind-value="Model.Id" />
+		<input type="hidden" @bind-value="Model.JobCandidateId" />
+		<input type="hidden" @bind-value="Model.Name" />
+		<input type="hidden" @bind-value="Model.Description" />
+		<input type="hidden" @bind-value="Model.MimeType" />
+		<input type="hidden" @bind-value="Model.FileName" />
+		<input type="hidden" @bind-value="Model.Data" />
+		<div class="form-group">
+			<br />
+			<input type="submit" value="Вилучити" class="btn btn-danger" />
+			<a href="portfolio/portfolio" class="btn btn-secondary">Скасувати</a>
+			<br />
+		</div>
+	</EditForm>
+	<br />
+
+	@if (Model.Data != null)
+	{
+		<img src="data:image/jpeg;base64,@(Convert.ToBase64String(Model.Data))" class="image" />
+	}
+
+	<p>@Model.Description</p>
+}
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromForm]
+	private Picture? Model { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using(ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Model = await dbContext.Portfolios.FindAsync(Id);
+		}
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext dbContext = dbContextFactory.CreateDbContext())
+			{
+				JobCandidate? jobCandidate = await dbContext.JobCandidates
+					.FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+				if (jobCandidate != null && Model != null && Model.JobCandidateId != jobCandidate.Id)
+				{
+					Message = "У вас нема доступу до цього ресурсу.";
+					navigationManager.NavigateTo("/AccessDenied");
+				}
+				else
+				{
+					try
+					{
+						dbContext.Portfolios.Remove(Model!);
+						await dbContext.SaveChangesAsync();
+					}
+					catch (Exception ex)
+					{
+						Message = ex.Message;
+					}
+				}
+			}
+			if (Message == "")
+			{
+				navigationManager.NavigateTo("/portfolio/portfolio");
+			}
+		}
+	}
+}

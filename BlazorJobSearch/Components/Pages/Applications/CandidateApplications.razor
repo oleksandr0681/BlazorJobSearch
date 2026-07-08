@@ -1,0 +1,70 @@
+﻿@page "/jobcandidate/applications"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+@using System.Globalization
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Заявки</PageTitle>
+
+<h1>Заявки</h1>
+
+<div>
+	@foreach (JobApplication jobApplication in JobApplications)
+	{
+		<a href=@("/applications/candidatejobrequest/"+jobApplication.Id)>
+			<div class="jobApplicationCard shadow-lg">
+				<p class="jobApplicationCard__Vacancy">@jobApplication.Vacancy.Job</p>
+				<p>@jobApplication.Vacancy.Employer.Name</p>
+				<p>Створено @jobApplication.Created.ToString()</p>
+				<p>Переглянуто роботодавцем @jobApplication.Viewed.ToString()</p>
+			</div>
+		</a>
+	}
+</div>
+
+@code {
+	private List<JobApplication> JobApplications { get; set; } = new List<JobApplication>();
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+			{
+				JobCandidate? jobCandidate = await dbContext.JobCandidates
+					.FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+				if (jobCandidate != null)
+				{
+					IEnumerable<JobApplication>? jobApplications = dbContext.JobApplications
+						.Include(j => j.Vacancy).Include(j => j.Vacancy.Employer)
+						.Where(j => j.JobCandidateId == jobCandidate.Id);
+					if (jobApplications != null)
+					{
+						JobApplications = jobApplications.ToList();
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,87 @@
+﻿@page "/portfolio/portfolio"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Портфоліо</PageTitle>
+
+<h1>Портфоліо</h1>
+
+<div>
+	<button class="btn btn-primary" title="Додати картинку." @onclick="NavigateAdd">
+		Додати
+	</button>
+</div>
+<br />
+<div id="portfolio">
+	@foreach (Picture picture in Pictures)
+	{
+		<div class="slideCard shadow-lg">
+			<a href=@("portfolio/slide/"+@picture.Id)>
+				<div>
+					<h4>@picture.Name</h4>
+					<div class="slideCard__image">
+						@if (picture.Data != null)
+						{
+							<img src="data:image/jpeg;base64,@(Convert.ToBase64String(picture.Data))" />
+						}
+					</div>
+				</div>
+			</a>
+		</div>
+	}
+</div>
+
+@code {
+	private List<Picture> Pictures { get; set; } = new List<Picture>();
+
+	private string? Message { get; set; }
+
+	// private string Uri { get; set; } = string.Empty;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+			{
+				JobCandidate? jobCandidate = await dbContext.JobCandidates
+					.FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+				if (jobCandidate != null)
+				{
+					IEnumerable<Picture> result = dbContext.Portfolios
+						.Where(p => p.JobCandidateId == jobCandidate.Id).OrderBy(p => p.Name);
+					if (result != null)
+					{
+						Pictures = result.ToList();
+					}
+				}
+			}
+		}
+	}
+
+	private void NavigateAdd()
+	{
+		navigationManager.NavigateTo("/portfolio/add");
+	}
+}

@@ -1,0 +1,190 @@
+﻿@page "/"
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+<PageTitle>Сервіс для пошуку роботи</PageTitle>
+
+<h1>Сервіс для пошуку роботи</h1>
+
+<div id="search">
+	<EditForm Model="Input" OnValidSubmit="Submit" method="Get" FormName="HomeSearch">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+		<div class="searchDiv">
+			<InputText @bind-Value="Input.Search" id="jobSearch" name="search" placeholder="Посада, компанія, ключові слова, місто. Наприклад, Інженер-програміст" />
+			<input type="submit" value="Пошук" class="btn btn-primary" />
+		</div>
+		<div class="filterDiv">
+			<div class="filter">
+				<div>
+					<label for="salary" class="form-label">
+						Зарплата
+					</label>
+				</div>
+				<div>
+					<InputNumber @bind-Value="Input.Salary" id="salary" class="form-control" />
+				</div>
+			</div>
+			<div class="filter">
+				<div>
+					<label for="employmentType" class="form-label">
+						Тип зайнятості
+					</label>
+				</div>
+				<div>
+					<InputSelect @bind-Value="Input.EmploymentType" id="employmentType" class="form-control">
+						<option checked="@(Input.EmploymentType)" value="">
+							Будь-який
+						</option>
+						@foreach (EmploymentType employmentType in EmploymentTypes)
+						{
+							<option checked="@(Input.EmploymentType)" value="@(employmentType.Name)">
+								@employmentType.Name
+							</option>
+						}
+					</InputSelect>
+				</div>
+			</div>
+			<div class="filter">
+				<div>
+					<label for="sector" class="form-label">
+						Галузь
+					</label>
+				</div>
+				<div>
+					<InputSelect @bind-Value="Input.Sector" id="sector" class="form-control">
+						@* <option checked="@(Input.Sector)" value selected> *@
+						@* 	Всі *@
+						@* </option> *@
+						<option checked="@(Input.Sector)" value="">
+							Всі
+						</option>
+						@foreach (string sector in Sectors)
+						{
+							<option checked="@(Input.Sector)" value="@(sector)">
+								@sector
+							</option>
+						}
+					</InputSelect>
+				</div>
+			</div>
+		</div>
+	</EditForm>
+</div>
+<div id="vacancies">
+	@foreach (Vacancy vacancy in Vacancies)
+	{
+		<div class="vacancyCard shadow-lg">
+			<a href=@("/vacancy/jobfound/"+vacancy.Id)>
+				<div>
+					<h4>@vacancy.Job</h4>
+					<div class="vacancyCard__description">
+						<p>@vacancy.Description</p>
+					</div>
+				</div>
+			</a>
+		</div>
+	}
+</div>
+@* Welcome to your new app. *@
+
+<p>@Message</p>
+
+@code {
+	[SupplyParameterFromForm(FormName = "HomeSearch")]
+	private InputModel Input { get; set; } = new();
+
+	private List<Vacancy> Vacancies { get; set; } = new List<Vacancy>();
+
+	private List<EmploymentType> EmploymentTypes { get; set; } = new List<EmploymentType>();
+
+	private List<string> Sectors { get; set; } = new List<string>();
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+		{
+			IEnumerable<EmploymentType> employmentTypes = dbContext.EmploymentTypes;
+			if (employmentTypes != null)
+			{
+				EmploymentTypes = employmentTypes.ToList();
+			}
+			IEnumerable<Vacancy> vacancies = dbContext.Vacancies.Where(v => v.Sector != "");
+			if (vacancies != null)
+			{
+				foreach (Vacancy vacancy in vacancies)
+				{
+					if (!Sectors.Contains(vacancy.Sector.ToLower()))
+					{
+						Sectors.Add(vacancy.Sector.ToLower());
+					}
+				}
+			}
+		}
+		Input.Sector = "";
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		if (Input.Search != null)
+		{
+			IEnumerable<Vacancy>? vacancies;
+			using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+			{
+				if (Input.Salary == null)
+				{
+					vacancies = dbContext.Vacancies
+						.Include(v => v.Employer)
+						.Where(v => (v.Job.Contains(Input.Search!) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector))
+						|| (v.KeyWords.Contains(Input.Search!) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector))
+						|| (v.Settlement.Contains(Input.Search) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector))
+						|| (v.Employer.Name.Contains(Input.Search) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector)))
+						.OrderByDescending(v => v.Created).ThenBy(v => v.Job);
+
+				}
+				else
+				{
+					vacancies = dbContext.Vacancies
+						.Include(v => v.Employer)
+						.Where(v => (v.Job.Contains(Input.Search!) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector) && v.Salary >= Input.Salary)
+						|| (v.KeyWords.Contains(Input.Search!) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector) && v.Salary >= Input.Salary)
+						|| (v.Settlement.Contains(Input.Search) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector) && v.Salary >= Input.Salary)
+						|| (v.Employer.Name.Contains(Input.Search) && v.EmploymentType.Name.Contains(Input.EmploymentType) && v.Sector.Contains(Input.Sector) && v.Salary >= Input.Salary))
+						.OrderByDescending(v => v.Created).ThenBy(v => v.Job);
+				}
+				if (vacancies != null)
+				{
+					Vacancies = vacancies.ToList();
+				}
+				else
+				{
+					Vacancies.Clear();
+				}
+			}
+		}
+	}
+
+	private sealed class InputModel
+	{
+		public string? Search { get; set; }
+
+		public int? Salary { get; set; }
+
+		public string? EmploymentType { get; set; } = string.Empty;
+
+		public string? Sector { get; set; }
+	}
+}

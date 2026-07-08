@@ -1,0 +1,230 @@
+﻿@page "/applications/jobrequest/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode @* Використовуєься для @onclick. *@
+@using JobSearchServices
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+@* inject IJSRuntime використовується для завантаження файла. *@
+@inject IJSRuntime JS;
+@inject AppData appData
+@inject ProtectedSessionStorage protectedSessionStore
+
+@attribute [Authorize(Roles = "Employer")]
+
+<PageTitle>Заявка на вакансію</PageTitle>
+
+<h1>Заявка на вакансію</h1>
+
+<button class="btn btn-primary" title="Змінити." @onclick="NavigateJobs">
+	Вакансії
+</button>
+<span> &nbsp; </span>
+
+@if (JobApplication != null && JobApplication.Vacancy != null && JobApplication.JobCandidate != null)
+{
+	<button class="btn btn-primary" title="Змінити." @onclick="NavigateAddMessage">
+		Створити повідомлення
+	</button>
+    <h2>@JobApplication.Vacancy.Job</h2>
+    <p>Створено @JobApplication.Created.ToString()</p>
+    <p>Переглянуто @JobApplication.Viewed.ToString()</p>
+
+    <h3>Кандидат на роботу: @JobApplication.JobCandidate.FullName</h3>
+    <h4>Особиста інформація</h4>
+    <p>Дата народження: @BirthDate.ToLongDateString()</p>
+    <p>Місце проживання: @JobApplication.JobCandidate.Residence</p>
+    <p>Телефон: @JobApplication.JobCandidate.TelephoneNumber</p>
+    <p>Електронна пошта: @JobApplication.JobCandidate.Email</p>
+    <p>Галузь: @JobApplication.JobCandidate.Sector</p>
+    <p>Посада: @JobApplication.JobCandidate.Job</p>
+    <p>Досвід роботи: @JobApplication.JobCandidate.WorkExperience</p>
+    <p>Навички: @JobApplication.JobCandidate.Skills</p>
+}
+
+<h4>Резюме</h4>
+@if (Resume != null)
+{
+    <p>
+        @Resume.FileName
+        <button class="btn btn-primary" @onclick="() => Download(Resume.Id)">
+            Завантажити
+        </button>
+    </p>
+}
+<br />
+<button class="btn btn-primary" title="Змінити." @onclick="Portfolio">
+    Портфоліо
+</button>
+@if (PortfolioToggle == true)
+{
+    <h4>Портфоліо</h4>
+    <div id="portfolio">
+        @foreach (Picture picture in Pictures)
+        {
+            <div class="slideCard shadow-lg">
+                <a href=@("portfolio/slide/"+@picture.Id)>
+                    <div>
+                        <h4>@picture.Name</h4>
+                        <div class="slideCard__image">
+                            @if (picture.Data != null)
+                            {
+                                <img src="data:image/jpeg;base64,@(Convert.ToBase64String(picture.Data))" />
+                            }
+                        </div>
+                    </div>
+                </a>
+            </div>
+        }
+    </div>
+}
+
+<br />
+<p>@Message</p>
+
+<script>
+    window.downloadFileFromStream = async (fileName, streamRef) => {
+    //    Отримуємо дані з streamRef.
+    const arrayBuffer = await streamRef.arrayBuffer();
+    const blob = new Blob([arrayBuffer]);
+    const url = window.URL.createObjectURL(blob);
+    //    Створюємо посилання для завантаження файлу.
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    //    Автоматично клікаємо по посиланню для початку завантаження.
+    document.body.appendChild(link);
+    link.click();
+    //    Видаляємо посилання після завантаження.
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    };
+</script>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private JobApplication? JobApplication { get; set; }
+
+    private DateTime BirthDate { get; set; }
+
+    private Resume? Resume { get; set; }
+
+    private bool PortfolioToggle { get; set; }
+
+    private List<Picture> Pictures { get; set; } = new List<Picture>();
+
+    private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		bool refresh = false;
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			JobApplication = await dbContext.JobApplications
+				.Include(j => j.JobCandidate).Include(j => j.Vacancy).FirstOrDefaultAsync(j => j.Id == Id);
+			if (JobApplication != null && JobApplication.JobCandidate != null &&
+				JobApplication.JobCandidate.BirthDate != null)
+			{
+				BirthDate = (DateTime)JobApplication.JobCandidate.BirthDate;
+				if (JobApplication.Viewed == null)
+				{
+					JobApplication.Viewed = DateTime.Now;
+					try
+					{
+						dbContext.JobApplications.Update(JobApplication);
+						await dbContext.SaveChangesAsync();
+					}
+					catch (Exception ex)
+					{
+						Message = ex.Message + " " + ex.InnerException;
+					}
+					refresh = true;
+				}
+				Resume = await dbContext.Resumes
+					.FirstOrDefaultAsync(r => r.JobCandidateId == JobApplication.JobCandidateId);
+				IEnumerable<Picture> pictures = dbContext.Portfolios
+					.Where(p => p.JobCandidateId == JobApplication.JobCandidateId).OrderBy(p => p.Name);
+				if (pictures != null)
+				{
+					Pictures = pictures.ToList();
+				}
+			}
+		}
+		appData.Uri = navigationManager.Uri;
+		if (refresh == true)
+		{
+			navigationManager.Refresh(true);
+		}
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			await SetUriAsync();
+			StateHasChanged();
+		}
+	}
+
+	private async Task SetUriAsync()
+	{
+		await protectedSessionStore.SetAsync("Uri", navigationManager.Uri);
+	}
+
+	private async Task Download(int id)
+	{
+		Message = "";
+		try
+		{
+			if (Resume != null && Resume.Data != null && Resume.MimeType != null &&
+					Resume.FileName != null)
+			{
+				byte[] bytes = Resume.Data;
+				string MimeType = Resume.MimeType;
+				using MemoryStream memoryStream = new MemoryStream(Resume.Data);
+				using DotNetStreamReference streamRef = new DotNetStreamReference(stream: memoryStream);
+				string fileName = Resume.FileName;
+				await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+			}
+			else
+			{
+				Message = "Помилка в заванжаненні файла.";
+			}
+		}
+		catch (Exception ex)
+		{
+			Message = ex.Message;
+		}
+	}
+
+	private void Portfolio()
+	{
+		PortfolioToggle = !PortfolioToggle;
+	}
+
+	private void NavigateJobs()
+	{
+		navigationManager.NavigateTo("/vacancy/jobs");
+	}
+
+	private void NavigateAddMessage()
+	{
+		appData.Uri = navigationManager.Uri;
+		appData.StringId = JobApplication.JobCandidate.ApplicationUserId;
+		navigationManager.NavigateTo("/messages/add");
+	}
+}

@@ -1,0 +1,109 @@
+﻿@page "/jobcandidate/candidate"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+@using System.Globalization
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Кандидат на роботу</PageTitle>
+
+<h1>Кандидат на роботу</h1>
+@if (JobCandidate == null)
+{
+	<p>Особиста інформація не додана.</p>
+	<button class="btn btn-primary" title="Додати особисту інфомацію." @onclick="NavigateAdd">
+		Додати
+	</button>
+}
+else
+{
+	<h3>Особиста інформація</h3>
+	<h3>@JobCandidate.FullName</h3>
+	<p>Дата народження: @birthDate.ToString("dd MMMM yyyy", CultureInfo.CreateSpecificCulture("uk-UA"))</p>
+	<p>Місце проживання: @JobCandidate.Residence</p>
+	<p>Телефон: @JobCandidate.TelephoneNumber</p>
+	<p>Електронна пошта: @JobCandidate.Email</p>
+	<p>Галузь: @JobCandidate.Sector</p>
+	<p>Посада: @JobCandidate.Job</p>
+	<p>Досвід роботи: @JobCandidate.WorkExperience</p>
+	<p>Навички: @JobCandidate.Skills</p>
+	<button class="btn btn-primary" title="Змінити особисту інформацію." @onclick="NavigateEdit">
+		Змінити
+	</button>
+	@* <button class="btn btn-danger" @onclick="DeleteCandidateAsync"> *@
+	@* 	Вилучити особисту інформацію *@
+	@* </button> *@
+}
+
+@code {
+	private JobCandidate? JobCandidate { get; set; }
+	private DateTime birthDate;
+	private string[]? Skills { get; set; }
+	// private string? UserName { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+		{
+			// UserName = user.Identity.Name;
+			using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			{
+				// ApplicationUser? applicationUser = await userManager.FindByNameAsync(user.Identity?.Name!);
+				string? userId = userManager.GetUserId(user);
+				ApplicationUser?  applicationUser = await dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
+				if (applicationUser != null)
+				{
+					JobCandidate = await dbContext.JobCandidates
+						.FirstOrDefaultAsync(j => j.ApplicationUserId == applicationUser.Id);
+				}
+				if (JobCandidate != null && JobCandidate.BirthDate != null)
+				{
+					birthDate = (DateTime)JobCandidate.BirthDate;
+				}
+				if (JobCandidate != null && JobCandidate.Skills != null)
+				{
+					Skills = JobCandidate.Skills.Split(";");
+				}
+			}
+		}
+	}
+
+	private void NavigateAdd()
+	{
+		navigationManager.NavigateTo("/jobcandidate/add");
+	}
+
+	private void NavigateEdit()
+	{
+		navigationManager.NavigateTo("/jobcandidate/edit/" + JobCandidate!.Id);
+	}
+
+	// private async Task DeleteCandidateAsync()
+	// {
+	// 	using (ApplicationDbContext? dbContext = await dbContextFactory.CreateDbContextAsync())
+	// 	{
+	// 		if (JobCandidate != null)
+	// 		{
+	// 			dbContext.JobCandidates.Remove(JobCandidate);
+	// 			await dbContext.SaveChangesAsync();
+	// 		}
+	// 	}
+	// 	navigationManager.NavigateTo("/jobcandidate/candidate", true);
+	// }
+}

@@ -1,0 +1,142 @@
+﻿@page "/employer/edit/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Employer")]
+
+<PageTitle>Компанія</PageTitle>
+
+<h1>Зміна компанії</h1>
+
+@if (Input != null)
+{
+	<EditForm Model="Input" OnValidSubmit="Submit" FormName="EditEmployer">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+		<input type="hidden" @bind-value="Input.Id" />
+		<input type="hidden" @bind-value="Input.ApplicationUserId" />
+		<div class="form-group">
+			<label for="name" class="form-label">
+				Назва копанії
+			</label>
+			<InputText @bind-Value="Input.Name" id="name" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="description" class="form-label">
+				Опис
+			</label>
+			<InputTextArea @bind-Value="Input.Description" id="description" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="history" class="form-label">
+				Історія
+			</label>
+			<InputTextArea @bind-Value="Input.History" id="history" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="settlement" class="form-label">
+				Населений пункт
+			</label>
+			<InputText @bind-Value="Input.Settlement" id="settlement" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="address" class="form-label">
+				Адреса
+			</label>
+			<InputText @bind-Value="Input.Address" id="address" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="telephoneNumber" class="form-label">
+				Телефон
+			</label>
+			<input type="tel" @bind-value="Input.TelephoneNumber" id="telephoneNumber" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="email" class="form-label">
+				Електронна пошта
+			</label>
+			<input type="email" @bind-value="Input.Email" id="email" class="form-control" />
+		</div>
+		<div class="form-group">
+			<br />
+			<input type="submit" value="Змінити" class="btn btn-primary" />
+			<button type="reset" class="btn btn-secondary" @onclick="Navigate">Скасувати</button>
+			<br />
+		</div>
+	</EditForm>
+}
+
+<p>@Message</p>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromForm(FormName = "EditCompany")]
+	private Employer? Input { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Input = await dbContext.Employers.FindAsync(Id);
+		}
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("Employer"))
+		{
+			string? userId = userManager.GetUserId(user);
+			if (Input != null && Input.ApplicationUserId != userId)
+			{
+				Message = "У вас нема доступу до цього ресурсу.";
+				navigationManager.NavigateTo("/AccessDenied");
+			}
+			else
+			{
+				using (ApplicationDbContext dbContext = dbContextFactory.CreateDbContext())
+				{
+					try
+					{
+						dbContext.Employers.Update(Input!);
+						await dbContext.SaveChangesAsync();
+					}
+					catch (Exception ex)
+					{
+						Message = ex.Message;
+					}
+				}
+				if (Message == "")
+				{
+					navigationManager.NavigateTo("/employer/employer");
+				}
+			}
+		}
+	}
+
+	private void Navigate()
+	{
+		navigationManager.NavigateTo("/employer/employer");
+	}
+}

@@ -1,0 +1,15 @@
+﻿@page "/AccessDenied"
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+
+@inject NavigationManager navigationManager;
+
+<PageTitle>Доступ заборонений</PageTitle>
+
+<h1>Доступ заборонений</h1>
+
+<p>У вас нема доступу до цього ресурсу.</p>
+<a href="@navigationManager.BaseUri">OK</a>
+
+@code {
+
+}

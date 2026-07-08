@@ -1,0 +1,82 @@
+﻿@page "/vacancy/jobs"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Employer")]
+
+<PageTitle>Вакансії</PageTitle>
+
+<h1>Вакансії</h1>
+
+<div>
+	<button class="btn btn-primary" title="Додати." @onclick="NavigateAdd">
+		Додати
+	</button>
+</div>
+<br />
+<div id="vacancies">
+	@foreach (Vacancy vacancy in Vacancies)
+	{
+		<div class="vacancyCard shadow-lg">
+			<a href=@("/vacancy/job/"+vacancy.Id)>
+				<div>
+					<h4>@vacancy.Job</h4>
+					<div class="vacancyCard__description">
+						<p>@vacancy.Description</p>
+					</div>
+				</div>
+			</a>
+		</div>
+	}
+</div>
+
+@code {
+	private List<Vacancy> Vacancies { get; set; } = new List<Vacancy>();
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("Employer"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			{
+				Employer? employer = await dbContext.Employers
+					.FirstOrDefaultAsync(e => e.ApplicationUserId == userId);
+				if (employer != null)
+				{
+					IEnumerable<Vacancy> vacancies = dbContext.Vacancies
+						.Where(v => v.EmployerId == employer.Id).OrderByDescending(v => v.Created);
+					if (vacancies != null)
+					{
+						Vacancies = vacancies.ToList();
+					}
+				}
+			}
+		}
+	}
+
+	private void NavigateAdd()
+	{
+		navigationManager.NavigateTo("/vacancy/add");
+	}
+}

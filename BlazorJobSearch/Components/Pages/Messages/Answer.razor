@@ -1,0 +1,198 @@
+﻿@page "/messages/answer"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+@using JobSearchServices
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick, вимкнення попереднього відмальовування. *@
+@rendermode InteractiveServer
+@inject AppData appData
+
+@attribute [Authorize]
+
+<PageTitle>Повідомлення</PageTitle>
+
+<h1>Повідомлення</h1>
+
+<EditForm Model="Input" OnValidSubmit="Submit" FormName="AnswerMessage">
+	<DataAnnotationsValidator />
+	<ValidationSummary />
+	<div class="form-group">
+		<label for="from" class="form-label">
+			Від
+		</label>
+		<InputText @bind-Value="Input.From" id="from" class="form-control" readonly />
+	</div>
+	<div class="form-group">
+		<label for="to" class="form-label">
+			До
+		</label>
+		<InputText @bind-Value="Input.To" id="to" class="form-control" readonly />
+	</div>
+	<div class="form-group">
+		<label for="title" class="form-label">
+			Заголовок
+		</label>
+		<InputText @bind-Value="Input.Title" id="title" class="form-control" />
+	</div>
+	<div class="form-group">
+		<label for="body" class="form-label">
+			Повідомлення
+		</label>
+		<InputTextArea @bind-Value="Input.Body" id="body" class="form-control" />
+	</div>
+	<div class="form-group">
+		<br />
+		<input type="submit" value="Відповісти" class="btn btn-primary" />
+		<button type="reset" class="btn btn-secondary" @onclick="Navigate">Скасувати</button>
+		<br />
+	</div>
+</EditForm>
+
+<br />
+<p>@ErrorMessage</p>
+
+@code {
+	private Message? Message { get; set; }
+
+	[SupplyParameterFromForm(FormName = "AnswerMessage")]
+	private InputModel Input { get; set; } = new();
+
+	private JobCandidate? JobCandidate { get; set; }
+
+	private Employer? Employer { get; set; }
+
+	private string? ErrorMessage { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		Message = appData.Message;
+		ErrorMessage = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated)
+		{
+			string? userId = userManager.GetUserId(user);
+			if (Message != null)
+			{
+				if (Message.FromId != userId && Message.ToId != userId)
+				{
+					ErrorMessage = "У вас нема доступу до цього ресурсу.";
+					navigationManager.NavigateTo("/AccessDenied");
+				}
+				else
+				{
+					if (user.IsInRole("JobCandidate"))
+					{
+						using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+						{
+							JobCandidate = await dbContext.JobCandidates
+								.FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+							if (JobCandidate != null && Message.JobCandidate.Id != JobCandidate.Id 
+								&& Message.FromId != userId)
+							{
+								ErrorMessage = "У вас нема доступу до цього ресурсу.";
+								navigationManager.NavigateTo("/AccessDenied");
+							}
+							if (JobCandidate != null)
+							{
+								Input.From = JobCandidate.FullName;
+								Input.To = Message.Employer.Name;
+							}
+						}
+					}
+					else if (user.IsInRole("Employer"))
+					{
+						using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+						{
+							Employer = await dbContext.Employers
+								.FirstOrDefaultAsync(e => e.ApplicationUserId == userId);
+							if (Employer != null && Message.Employer.Id != Employer.Id 
+								&& Message.FromId != userId)
+							{
+								ErrorMessage = "У вас нема доступу до цього ресурсу.";
+								navigationManager.NavigateTo("/AccessDenied");
+							}
+							if (Employer != null)
+							{
+								Input.From = Employer.Name;
+								Input.To = Message.JobCandidate.FullName;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	private async Task Submit()
+	{
+		ErrorMessage = "";
+		if (Message != null && Message.FromId != null && Message.ToId != null)
+		{
+			Message message = new Message();
+			message.FromId = Message.FromId;
+			message.ToId = Message.ToId;
+			message.JobCandidateId = Message.JobCandidate.Id;
+			message.EmployerId = Message.Employer.Id;
+			message.Title = Input.Title;
+			message.Body = Input.Body;
+			message.Sent = DateTime.Now;
+			using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			{
+				try
+				{
+					dbContext.Messages.Add(message);
+					await dbContext.SaveChangesAsync();
+				}
+				catch (Exception ex)
+				{
+					ErrorMessage = ex.Message + " " + ex.InnerException;
+				}
+			}
+			if (ErrorMessage == "")
+			{
+				navigationManager.NavigateTo("/messages/messages");
+			}
+		}
+		else
+		{
+			ErrorMessage = "Кандидат на роботу або роботодавець не знайдений.";
+		}
+	}
+
+	private void Navigate()
+	{
+		navigationManager.NavigateTo("/messages/messages");
+	}
+
+	private sealed class InputModel
+	{
+		[Required]
+		[Display(Name = "Від")]
+		public string From { get; set; } = string.Empty;
+
+		[Required]
+		[Display(Name = "До")]
+		public string To { get; set; } = string.Empty;
+
+		[Display(Name = "Заголовок")]
+		public string? Title { get; set; }
+
+		[Required]
+		[Display(Name = "Основна частина")]
+		public string Body { get; set; } = string.Empty;
+	}
+}

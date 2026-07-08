@@ -1,0 +1,99 @@
+﻿@page "/employer/employer/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+@using JobSearchServices
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick, вимкнення попереднього відмальовування. *@
+@rendermode InteractiveServer
+@inject AppData appData
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Компанія</PageTitle>
+
+<h1>Компанія</h1>
+
+@if (appData.Uri != null)
+{
+	<button class="btn btn-primary" title="Змінити." @onclick="Navigate">
+		Повернутися
+	</button>
+}
+else
+{
+	<button class="btn btn-primary" title="Змінити." @onclick="NavigateJobApplications">
+		Заявки
+	</button>
+}
+<span> &nbsp; </span>
+
+@if (Employer != null)
+{
+	<button class="btn btn-primary" title="Змінити." @onclick="NavigateAddMessage">
+		Створити повідомлення
+	</button>
+	<h3>@Employer.Name</h3>
+	<p>@Employer.Description</p>
+	<p>@Employer.History</p>
+	<p>@Employer.Settlement</p>
+	<p>@Employer.Address</p>
+	<p>@Employer.TelephoneNumber</p>
+	<p>@Employer.Email</p>
+}
+
+<br />
+<p>@Message</p>
+
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	private Employer? Employer { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Employer = await dbContext.Employers.Include(e => e.ApplicationUser)
+				.FirstOrDefaultAsync(e => e.Id == Id);
+		}
+		if (Employer != null)
+		{
+			appData.StringId = Employer.ApplicationUserId;
+		}
+	}
+
+	private void NavigateJobApplications()
+	{
+		navigationManager.NavigateTo("/jobcandidate/applications");
+	}
+
+	private void Navigate()
+	{
+		if (appData.Uri != null)
+		{
+			navigationManager.NavigateTo(appData.Uri);
+		}
+	}
+
+	private void NavigateAddMessage()
+	{
+		appData.Uri = navigationManager.Uri;
+		appData.StringId = Employer.ApplicationUserId;
+		navigationManager.NavigateTo("/messages/add");
+	}
+}

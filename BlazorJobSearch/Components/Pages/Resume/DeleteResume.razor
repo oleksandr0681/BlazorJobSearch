@@ -1,0 +1,102 @@
+﻿@page "/resume/delete/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Резюме</PageTitle>
+
+<h1>Вилучення резюме</h1>
+
+@if (Model != null)
+{
+	<h3>Ви впевнені, що хочете вилучити @Model.FileName ?</h3>
+	<br />
+	<EditForm Model="Model" OnValidSubmit="Submit" FormName="DeleteResume">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+		<input type="hidden" @bind-value="Model.Id" />
+		<input type="hidden" @bind-value="Model.JobCandidateId" />
+		<input type="hidden" @bind-value="Model.MimeType" />
+		<input type="hidden" @bind-value="Model.FileName" />
+		<input type="hidden" @bind-value="Model.Data" />
+		<div class="form-group">
+			<br />
+			<input type="submit" value="Вилучити" class="btn btn-danger" />
+			@* <button class="btn btn-secondary" @onclick="Navigate">Скасувати</button> *@
+			<a href="@ResumeUri" class="btn btn-secondary">Скасувати</a>
+			<br />
+		</div>
+	</EditForm>
+}
+
+<p>@Message</p>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromForm]
+	private Resume? Model { get; set; }
+
+	private string ResumeUri { get; set; } = string.Empty;
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Model = await dbContext.Resumes.FindAsync(Id);
+		}
+		ResumeUri = navigationManager.BaseUri + "resume/curriculumvitae";
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext dbContext = dbContextFactory.CreateDbContext())
+			{
+				JobCandidate? jobCandidate = await dbContext.JobCandidates
+					.FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+				if (jobCandidate != null && Model != null && Model.JobCandidateId != jobCandidate.Id)
+				{
+					Message = "У вас нема доступу до цього ресурсу.";
+					navigationManager.NavigateTo("/AccessDenied");
+				}
+				else
+				{
+					try
+					{
+						dbContext.Resumes.Remove(Model!);
+						await dbContext.SaveChangesAsync();
+					}
+					catch (Exception ex)
+					{
+						Message = ex.Message;
+					}
+				}
+			}
+			if (Message == "")
+			{
+				navigationManager.NavigateTo("/resume/curriculumvitae");
+			}
+		}
+	}
+}

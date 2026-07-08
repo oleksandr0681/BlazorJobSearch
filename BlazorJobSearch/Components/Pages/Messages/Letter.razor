@@ -1,0 +1,144 @@
+﻿@page "/messages/message/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+@using JobSearchServices
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick, вимкнення попереднього відмальовування. *@
+@rendermode InteractiveServer
+@inject AppData appData
+
+@attribute [Authorize]
+
+<PageTitle>Повідомлення</PageTitle>
+
+<h1>Повідомлення</h1>
+
+<button class="btn btn-primary" title="Повернутись до повідомлень." @onclick="NavigateMessages">
+	Повідомлення
+</button>
+<span> &nbsp; </span>
+@if (Message != null && Message.ToId == UserId) 
+{
+	<button class="btn btn-primary" title="Повернутись до повідомлень." @onclick="NavigateAnswer">
+		Відповісти
+	</button>
+}
+<br />
+
+<p>Від @ShowMessage.From</p>
+<p>До @ShowMessage.To</p>
+<p>Відправлено @ShowMessage.Sent.ToString()</p>
+<p>Переглянуто @ShowMessage.Viewed</p>
+<h2>@ShowMessage.Title</h2>
+<p>@ShowMessage.Body</p>
+
+<br />
+<p>@ErrorMessage</p>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	private Message? Message { get; set; }
+
+	private ShowMessage ShowMessage { get; set; } = new ShowMessage();
+
+	private string? UserId { get; set; }
+
+	private string? ErrorMessage { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		ErrorMessage = "";
+		bool refresh = false;
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated)
+		{
+			string? userId = userManager.GetUserId(user);
+			UserId = userId;
+			using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+			{
+				Message = await dbContext.Messages.Include(m => m.JobCandidate)
+					.Include(m => m.Employer).FirstOrDefaultAsync(m => m.Id == Id);
+				if (Message != null)
+				{
+					if (Message.FromId != userId && Message.ToId != userId)
+					{
+						ErrorMessage = "У вас нема доступу до цього ресурсу.";
+						navigationManager.NavigateTo("/AccessDenied");
+					}
+					else
+					{
+						if (Message.ToId == userId && Message.Viewed == null)
+						{
+							Message.Viewed = DateTime.Now;
+							try
+							{
+								dbContext.Messages.Update(Message);
+								await dbContext.SaveChangesAsync();
+							}
+							catch (Exception ex)
+							{
+								ErrorMessage = ex.Message + " " + ex.InnerException;
+							}
+							refresh = true;
+						}
+						ShowMessage.Id = Message.Id;
+						if (Message.FromId == Message.JobCandidate.ApplicationUserId)
+						{
+							ShowMessage.From = Message.JobCandidate.FullName;
+							ShowMessage.To = Message.Employer.Name;
+						}
+						else if (Message.FromId == Message.Employer.ApplicationUserId)
+						{
+							ShowMessage.From = Message.Employer.Name;
+							ShowMessage.To = Message.JobCandidate.FullName;
+						}
+						ShowMessage.Title = Message.Title;
+						ShowMessage.Body = Message.Body;
+						ShowMessage.Sent = Message.Sent;
+						ShowMessage.Viewed = Message.Viewed;
+					}
+				}
+			}
+		}
+		if (refresh == true)
+		{
+			navigationManager.Refresh(true);
+		}
+	}
+
+	private void NavigateMessages()
+	{
+		navigationManager.NavigateTo("/messages/messages");
+	}
+
+	private void NavigateAnswer()
+	{
+		if (Message != null)
+		{
+			Message answer = new Message();
+			answer.ToId = Message.FromId;
+			answer.FromId = Message.ToId;
+			answer.JobCandidateId = Message.JobCandidateId;
+			answer.EmployerId = Message.EmployerId;
+			answer.JobCandidate = Message.JobCandidate;
+			answer.Employer = Message.Employer;
+			appData.Message = answer;
+			navigationManager.NavigateTo("/messages/answer");
+		}
+	}
+}

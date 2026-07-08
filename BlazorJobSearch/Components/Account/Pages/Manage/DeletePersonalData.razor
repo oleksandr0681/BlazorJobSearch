@@ -1,0 +1,167 @@
+﻿@page "/Account/Manage/DeletePersonalData"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityUserAccessor UserAccessor
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<DeletePersonalData> Logger
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory
+
+<PageTitle>Delete Personal Data</PageTitle>
+
+<StatusMessage Message="@message" />
+
+<h3>Delete Personal Data</h3>
+
+<div class="alert alert-warning" role="alert">
+    <p>
+        <strong>Deleting this data will permanently remove your account, and this cannot be recovered.</strong>
+    </p>
+</div>
+
+<div>
+    <EditForm Model="Input" FormName="delete-user" OnValidSubmit="OnValidSubmitAsync" method="post">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger" role="alert" />
+        @if (requirePassword)
+        {
+            <div class="form-floating mb-3">
+                <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="Please enter your password." />
+                <label for="password" class="form-label">Password</label>
+                <ValidationMessage For="() => Input.Password" class="text-danger" />
+            </div>
+        }
+        <button class="w-100 btn btn-lg btn-danger" type="submit">Delete data and close my account</button>
+    </EditForm>
+</div>
+
+@code {
+    private string? message;
+    private ApplicationUser user = default!;
+    private bool requirePassword;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        requirePassword = await UserManager.HasPasswordAsync(user);
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (requirePassword && !await UserManager.CheckPasswordAsync(user, Input.Password))
+        {
+            message = "Error: Incorrect password.";
+            return;
+        }
+
+        IList<string> userRoles = new List<string>();
+        userRoles = await UserManager.GetRolesAsync(user);
+        using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+        {
+            if (userRoles.Contains("Employer"))
+            {
+                try
+                {
+                    Employer? employer = await dbContext.Employers
+                        .FirstOrDefaultAsync(f => f.ApplicationUserId == user.Id);
+                    if (employer != null)
+                    {
+                        IEnumerable<Vacancy> vacancies = dbContext.Vacancies
+                            .Where(v => v.EmployerId == employer.Id);
+                        if (vacancies != null)
+                        {
+                            foreach (Vacancy vacancy in vacancies)
+                            {
+                                IEnumerable<JobApplication> jobApplications = dbContext.JobApplications
+                                .Where(j => j.VacancyId == vacancy.Id);
+                                if (jobApplications != null)
+                                {
+                                    foreach (JobApplication jobApplication in jobApplications)
+                                    {
+                                        dbContext.JobApplications.Remove(jobApplication);
+                                    }
+                                    await dbContext.SaveChangesAsync();
+                                }
+                            }
+                        }
+                        IEnumerable<Message> messages = dbContext.Messages
+                            .Where(m => m.EmployerId == employer.Id || m.FromId == user.Id || m.ToId == user.Id);
+                        if (message != null)
+                        {
+                            foreach (Message message in messages)
+                            {
+                                dbContext.Messages.Remove(message);
+                            }
+                            await dbContext.SaveChangesAsync();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    message = ex.Message + " " + ex.InnerException;
+                }
+            }
+            if (userRoles.Contains("JobCandidate"))
+            {
+                try
+                {
+                    JobCandidate? jobCandidate = await dbContext.JobCandidates
+                        .FirstOrDefaultAsync(j => j.ApplicationUserId == user.Id);
+                    if (jobCandidate != null)
+                    {
+                        IEnumerable<Message> messages = dbContext.Messages
+                            .Where(m => m.JobCandidateId == jobCandidate.Id || m.FromId == user.Id || m.ToId == user.Id);
+                        if (messages != null)
+                        {
+                            foreach (Message messageEntity in messages)
+                            {
+                                dbContext.Messages.Remove(messageEntity);
+                            }
+                            await dbContext.SaveChangesAsync();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    message = ex.Message + " " + ex.InnerException;
+                }
+            }
+        }
+        if (message != null)
+        {
+            return;
+        }
+
+        var result = await UserManager.DeleteAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException("Unexpected error occurred deleting user.");
+        }
+
+        await SignInManager.SignOutAsync();
+
+        var userId = await UserManager.GetUserIdAsync(user);
+        Logger.LogInformation("User with ID '{UserId}' deleted themselves.", userId);
+
+        RedirectManager.RedirectToCurrentPage();
+    }
+
+    private sealed class InputModel
+    {
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+    }
+}

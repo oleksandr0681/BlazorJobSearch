@@ -1,0 +1,135 @@
+﻿@page "/resume/curriculumvitae"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* inject IJSRuntime використовується для завантаження файла. *@
+@inject IJSRuntime JS;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Резюме</PageTitle>
+
+<h1>Резюме</h1>
+@if (Resume == null)
+{
+	<div>
+		<button class="btn btn-primary" title="Додати резюме." @onclick="NavigateAdd">
+			Додати
+		</button>
+	</div>
+}
+else
+{
+	<p>@Resume.FileName</p>
+	<div>
+		<button class="btn btn-primary" @onclick="() => Download(Resume.Id)">
+			Завантажити
+		</button>
+		<span> &nbsp; </span>
+		<button class="btn btn-danger" title="Вилучити резюме." @onclick="NavigateDelete">
+			Вилучити
+		</button>
+	</div>
+}
+
+<br />
+<p>@Message</p>
+
+<script>
+	window.downloadFileFromStream = async (fileName, streamRef) => {
+	//    Отримуємо дані з streamRef.
+	const arrayBuffer = await streamRef.arrayBuffer();
+	const blob = new Blob([arrayBuffer]);
+	const url = window.URL.createObjectURL(blob);
+	//    Створюємо посилання для завантаження файлу.
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = fileName;
+	//    Автоматично клікаємо по посиланню для початку завантаження.
+	document.body.appendChild(link);
+	link.click();
+	//    Видаляємо посилання після завантаження.
+	document.body.removeChild(link);
+	URL.revokeObjectURL(url);
+	};
+</script>
+
+@code {
+	private Resume? Resume { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			{
+				JobCandidate? jobCandidate = await dbContext.JobCandidates
+						.FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+				if (jobCandidate != null)
+				{
+					Resume = await dbContext.Resumes
+						.FirstOrDefaultAsync(r => r.JobCandidateId == jobCandidate.Id);
+				}
+			}
+		}
+	}
+
+	private async Task Download(int id)
+	{
+		Message = "";
+		try
+		{
+			if (Resume != null && Resume.Data != null && Resume.MimeType != null &&
+					Resume.FileName != null)
+			{
+				byte[] bytes = Resume.Data;
+				string MimeType = Resume.MimeType;
+				using MemoryStream memoryStream = new MemoryStream(Resume.Data);
+				using DotNetStreamReference streamRef = new DotNetStreamReference(stream: memoryStream);
+				string fileName = Resume.FileName;
+				await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+			}
+			else
+			{
+				Message = "Помилка в заванжаненні файла.";
+			}
+			// using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			// {
+
+			// }
+		}
+		catch (Exception ex)
+		{
+			Message = ex.Message;
+		}
+	}
+
+	private void NavigateAdd()
+	{
+		navigationManager.NavigateTo("/resume/add");
+	}
+
+	private void NavigateDelete()
+	{
+		navigationManager.NavigateTo("/resume/delete/" + Resume!.Id);
+	}
+}

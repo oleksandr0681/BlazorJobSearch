@@ -1,0 +1,107 @@
+﻿@page "/messages/messages"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using JobSearchServices
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Microsoft.AspNetCore.Components @* Використовуєься для NavigationManager. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@* @inject AppData appData *@
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick, вимкнення попереднього відмальовування. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize]
+
+<PageTitle>Повідомлення</PageTitle>
+
+<h1>Повідомлення</h1>
+
+<div>
+	@foreach (ShowMessage showMessage in ShowMessages)
+	{
+		<a href=@("/messages/message/"+showMessage.Id)>
+			<div class="messageCard shadow-lg">
+				<h4>@showMessage.Title</h4>
+				<p>Від @showMessage.From</p>
+				<p>До @showMessage.To</p>
+				<p>@showMessage.Sent</p>
+			</div>
+		</a>
+	}
+</div>
+
+@code {
+	private List<Message> Messages { get; set; } = new List<Message>();
+
+	private List<ShowMessage> ShowMessages { get; set; } = new List<ShowMessage>();
+
+	private string? FromId { get; set; }
+
+	private string? ToId { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		string? userId = userManager.GetUserId(user);
+		FromId = userId;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated)
+		{
+			using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+			{
+				IEnumerable<Message> messages = dbContext.Messages
+					.Include(m => m.JobCandidate).Include(m => m.Employer)
+					.Where(m => m.FromId == userId || m.ToId == userId).OrderByDescending(m => m.Sent);
+				if (messages != null)
+				{
+					Messages = messages.ToList();
+				}
+				foreach (Message message in Messages)
+				{
+					ShowMessage showMessage = new ShowMessage();
+					showMessage.Id = message.Id;
+					if (message.FromId == message.JobCandidate.ApplicationUserId)
+					{
+						showMessage.From = message.JobCandidate.FullName;
+						showMessage.To = message.Employer.Name;
+					}
+					else if (message.FromId == message.Employer.ApplicationUserId)
+					{
+						showMessage.From = message.Employer.Name;
+						showMessage.To = message.JobCandidate.FullName;
+					}
+					showMessage.Title = message.Title;
+					showMessage.Body = message.Body;
+					showMessage.Sent = message.Sent;
+					showMessage.Viewed = message.Viewed;
+					ShowMessages.Add(showMessage);
+				}
+			}
+		}
+	}
+
+	// private sealed class ShowMessage
+	// {
+	// 	public int Id { get; set; }
+
+	// 	public string From { get; set; } = string.Empty;
+		
+	// 	public string To { get; set; } = string.Empty;
+		
+	// 	public string? Title { get; set; }
+
+	// 	public string Body { get; set; } = string.Empty;
+
+	// 	public DateTime Sent { get; set; } = DateTime.Now;
+
+	// 	public DateTime? Viewed { get; set; }
+	// }
+}

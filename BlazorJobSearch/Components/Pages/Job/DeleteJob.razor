@@ -1,0 +1,133 @@
+﻿@page "/vacancy/delete/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Employer")]
+
+<PageTitle>Вакансія</PageTitle>
+
+<h1>Вилучення вакансії</h1>
+
+@if (Model != null)
+{
+	<h3>Ви впевнені, що хочете вилучити @Model.Job?</h3>
+	<p>@Model.Sector</p>
+	<p>Зарплата: @Model.Salary грн.</p>
+	<p>Місто: @Model.Settlement</p>
+	<p>Адреса: @Model.Address</p>
+	<p>@Model.Description</p>
+	<p>@Model.Requirements</p>
+	<p>@Model.Created.ToString()</p>
+	<br />
+	<EditForm Model="Model" OnValidSubmit="Submit" FormName="DeleteVacancy">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+		<input type="hidden" @bind-value="Model.Id" />
+		<input type="hidden" @bind-value="Model.EmployerId" />
+		<input type="hidden" @bind-value="Model.Sector" />
+		<input type="hidden" @bind-value="Model.Job" />
+		<input type="hidden" @bind-value="Model.Salary" />
+		<input type="hidden" @bind-value="Model.Description" />
+		<input type="hidden" @bind-value="Model.Requirements" />
+		<input type="hidden" @bind-value="Model.KeyWords" />
+		<input type="hidden" @bind-value="Model.WorkingConditionId" />
+		<input type="hidden" @bind-value="Model.Settlement" />
+		<input type="hidden" @bind-value="Model.Address" />
+		<input type="hidden" @bind-value="Model.EmploymentTypeId" />
+		<input type="hidden" @bind-value="Model.Created" />
+		<div class="form-group">
+			<br />
+			<input type="submit" value="Вилучити" class="btn btn-danger" />
+			<button type="reset" class="btn btn-secondary" @onclick="Navigate">Скасувати</button>
+			<br />
+		</div>
+	</EditForm>
+}
+
+<br />
+<p>@Message</p>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromForm(FormName = "DeleteVacancy")]
+	private Vacancy? Model { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Model = await dbContext.Vacancies.FindAsync(Id);
+		}
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("Employer"))
+		{
+			string? userId = userManager.GetUserId(user);
+			using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+			{
+				Employer? employer = await dbContext.Employers
+					.FirstOrDefaultAsync(e => e.ApplicationUserId == userId);
+				if (employer != null && Model != null && Model.EmployerId != employer.Id)
+				{
+					Message = "У вас нема доступу до цього ресурсу.";
+					navigationManager.NavigateTo("/AccessDenied");
+				}
+				else
+				{
+					try
+					{
+						IEnumerable<JobApplication> jobApplications = dbContext.JobApplications
+							.Where(j => j.VacancyId == Model.Id);
+						if (jobApplications != null)
+						{
+							foreach (JobApplication jobApplication in jobApplications)
+							{
+								dbContext.JobApplications.Remove(jobApplication);
+							}
+							await dbContext.SaveChangesAsync();
+						}
+						dbContext.Vacancies.Remove(Model!);
+						await dbContext.SaveChangesAsync();
+					}
+					catch (Exception ex)
+					{
+						Message = ex.Message + " " + ex.InnerException;
+					}
+				}
+			}
+			if (Message == "")
+			{
+				navigationManager.NavigateTo("/vacancy/jobs");
+			}
+		}
+	}
+
+	private void Navigate()
+	{
+		navigationManager.NavigateTo("/vacancy/jobs");
+	}
+}

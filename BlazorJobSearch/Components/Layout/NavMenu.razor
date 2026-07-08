@@ -1,0 +1,215 @@
+﻿@implements IDisposable
+
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">BlazorJobSearch</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Головна
+            </NavLink>
+        </div>
+
+        @* <div class="nav-item px-3"> *@
+        @*     <NavLink class="nav-link" href="counter"> *@
+        @*         <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter *@
+        @*     </NavLink> *@
+        @* </div> *@
+
+        @* <div class="nav-item px-3"> *@
+        @*     <NavLink class="nav-link" href="weather"> *@
+        @*         <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather *@
+        @*     </NavLink> *@
+        @* </div> *@
+
+        @* <div class="nav-item px-3"> *@
+        @*     <NavLink class="nav-link" href="auth"> *@
+        @*         <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Auth Required *@
+        @*     </NavLink> *@
+        @* </div> *@
+
+        <AuthorizeView>
+            <Authorized>
+                @if (context.User.IsInRole("JobCandidate"))
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="jobcandidate/candidate">
+                            <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Кандидат на роботу
+                        </NavLink>
+                    </div>
+                }
+
+                @if (context.User.IsInRole("JobCandidate") && JobCandidate != null)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="resume/curriculumvitae">
+                            <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Резюме
+                        </NavLink>
+                    </div>
+
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="portfolio/portfolio">
+                            <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Портфоліо
+                        </NavLink>
+                    </div>
+
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="jobcandidate/applications">
+                            <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Заявки
+                        </NavLink>
+                    </div>
+
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="messages/messages">
+                            <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Повідомлення
+                        </NavLink>
+                    </div>
+                }
+
+                @if (context.User.IsInRole("Employer"))
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="employer/employer">
+                            <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Роботодавець
+                        </NavLink>
+                    </div>
+                }
+
+                @if (context.User.IsInRole("Employer") && Employer != null)
+                {
+                    if (NewJobApplication == true)
+                    {
+                        <div class="nav-item px-3">
+                            <NavLink class="nav-link relative" href="vacancy/jobs" title="У вас є нові заявки.">
+                                <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Вакансії
+                                <span class="dot"></span>
+                            </NavLink>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="nav-item px-3">
+                            <NavLink class="nav-link relative" href="vacancy/jobs">
+                                <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Вакансії
+                            </NavLink>
+                        </div>
+                    }
+
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="messages/messages">
+                            <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Повідомлення
+                        </NavLink>
+                    </div>
+                }
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Account/Manage">
+                        <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @context.User.Identity?.Name
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <form action="Account/Logout" method="post">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                        <button type="submit" class="nav-link">
+                            <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
+                        </button>
+                    </form>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Account/Register">
+                        <span class="bi bi-person-nav-menu" aria-hidden="true"></span> Реєстрація
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Account/Login">
+                        <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Вхід
+                    </NavLink>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+    </nav>
+</div>
+
+@code {
+    private string? currentUrl;
+
+    private JobCandidate? JobCandidate { get; set; }
+
+    private Employer? Employer { get; set; }
+
+    private bool NewJobApplication { get; set; } = false;
+
+    // protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+
+        AuthenticationState? authState = await authenticationStateProvider
+            .GetAuthenticationStateAsync();
+        System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+        if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+        {
+            string? userId = userManager.GetUserId(user);
+            if (userId != null)
+            {
+                using (ApplicationDbContext dbContext = dbContextFactory.CreateDbContext())
+                {
+                    JobCandidate = await dbContext.JobCandidates
+                        .FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+                }
+            }
+        }
+        if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("Employer"))
+        {
+            string? userId = userManager.GetUserId(user);
+            using (ApplicationDbContext dbContext = dbContextFactory.CreateDbContext())
+            {
+                Employer = await dbContext.Employers
+                    .FirstOrDefaultAsync(e => e.ApplicationUserId == userId);
+                if (Employer != null)
+                {
+                    IEnumerable<Vacancy> vacancies = dbContext.Vacancies
+                        .Where(v => v.EmployerId == Employer.Id);
+                    List<int> vacancyIds = new List<int>();
+                    foreach (Vacancy vacancy in vacancies)
+                    {
+                        vacancyIds.Add(vacancy.Id);
+                    }
+                    NewJobApplication = await dbContext.JobApplications
+                        .AnyAsync(j => vacancyIds.Contains(j.VacancyId) && j.Viewed == null);
+                }
+            }
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}
+

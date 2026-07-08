@@ -1,0 +1,151 @@
+﻿@page "/jobcandidate/edit/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Кандидат на роботу</PageTitle>
+
+<h1>Зміна особистої інформації</h1>
+
+@if (Model != null)
+{
+	<EditForm Model="Model" OnValidSubmit="Submit" FormName="EditJobCandidate">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+		<input type="hidden" @bind-value="Model.Id" />
+		<input type="hidden" @bind-value="Model!.ApplicationUserId" />
+		<div class="form-group">
+			<label for="fullName" class="form-label">
+				Прізвище, ім'я, по батькові
+			</label>
+			<InputText @bind-Value="Model!.FullName" id="fullName" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="birthDate" class="form-label">
+				Дата народження
+			</label>
+			<InputDate @bind-Value="Model.BirthDate" id="birthDate" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="residence" class="form-label">
+				Місце проживання
+			</label>
+			<InputText @bind-Value="Model.Residence" id="residence" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="telephoneNumber" class="form-label">
+				Телефон
+			</label>
+			<input type="tel" @bind-value="Model.TelephoneNumber" id="telephoneNumber" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="email" class="form-label">
+				Електронна пошта
+			</label>
+			<input type="email" @bind-value="Model.Email" id="email" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="sector" class="form-label">
+				Галузь
+			</label>
+			<InputText @bind-Value="Model.Sector" id="sector" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="job" class="form-label">
+				Посада
+			</label>
+			<InputText @bind-Value="Model.Job" id="job" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="workExperience" class="form-label">
+				Досвід роботи
+			</label>
+			<InputTextArea @bind-Value="Model.WorkExperience" id="workExperience" class="form-control" />
+		</div>
+		<div class="form-group">
+			<label for="skills" class="form-label">
+				Навички
+			</label>
+			<InputTextArea @bind-Value="Model.Skills" id="skills" class="form-control" />
+		</div>
+		<div class="form-group">
+			<input type="submit" value="Змінити" class="btn btn-primary" />
+			<button type="reset" class="btn btn-secondary" @onclick="Navigate">Скасувати</button>
+		</div>
+	</EditForm>
+}
+<p>@Message</p>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromForm]
+	private JobCandidate? Model { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Model = await dbContext.JobCandidates.FindAsync(Id);
+		}
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+		{
+			string? userId = userManager.GetUserId(user);
+			if (Model != null && Model.ApplicationUserId != userId)
+			{
+				Message = "У вас нема доступу до цього ресурсу.";
+				navigationManager.NavigateTo("/AccessDenied");
+			}
+			else
+			{
+				using (ApplicationDbContext dbContext = dbContextFactory.CreateDbContext())
+				{
+					try
+					{
+						dbContext.JobCandidates.Update(Model!);
+						await dbContext.SaveChangesAsync();
+					}
+					catch (Exception ex)
+					{
+						Message = ex.Message;
+					}
+				}
+				if (Message == "")
+				{
+					navigationManager.NavigateTo("/jobcandidate/candidate");
+				}
+			}
+		}
+	}
+
+	private void Navigate()
+	{
+		navigationManager.NavigateTo("/jobcandidate/candidate");
+	}
+}

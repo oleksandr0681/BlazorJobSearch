@@ -1,0 +1,158 @@
+﻿@page "/resume/add"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Резюме</PageTitle>
+
+<h1>Додавання резюме</h1>
+
+<EditForm Model="Input" enctype="multipart/form-data" OnSubmit="Submit" FormName="AddResume">
+	<DataAnnotationsValidator />
+	<ValidationSummary class="text-danger" />
+	<div class="form-group">
+		<label  class="form-label">
+			Тип файла: pdf.
+		</label>
+		<InputFile name="Input.File" OnChange="LoadFiles" class="form-control" />
+	</div>
+	<div class="form-group">
+		<br />
+		<input type="submit" value="Додати" class="btn btn-primary" />
+		<a href="@ResumeUri" class="btn btn-secondary">Скасувати</a>
+		<br />
+	</div>
+</EditForm>
+
+<br />
+<p>@Message</p>
+
+@code {
+	private string ResumeUri { get; set; } = string.Empty;
+
+	private string? Message { get; set; }
+
+	[SupplyParameterFromForm(FormName = "AddResume")]
+	private InputModel Input { get; set; } = new();
+
+	private Resume Resume { get; set; } = new Resume();
+
+	protected override void OnInitialized()
+	{
+		base.OnInitialized();
+		ResumeUri = navigationManager.BaseUri + "resume/curriculumvitae";
+	}
+
+	private async Task LoadFiles(InputFileChangeEventArgs e)
+	{
+		Message = "";
+		long maxFileSize = 20971520;
+		if (e != null && e.File != null)
+		{
+			if (e.File.Size > maxFileSize)
+			{
+				Message = "Файл перевищує 20МБ.";
+			}
+			if (e.File.ContentType.ToLower().StartsWith("application/pdf") != true)
+			{
+				Message = "Тип файла не pdf.";
+			}
+			if (Message == "")
+			{
+				try
+				{
+					using (MemoryStream? memoryStream = new MemoryStream())
+					{
+						await e.File.OpenReadStream(maxFileSize).CopyToAsync(memoryStream);
+						// Встановлення масива байтів.
+						Resume.Data = memoryStream.ToArray();
+						// Встановлення MimeType.
+						Resume.MimeType = e.File.ContentType;
+						// Встановлення імені файла.
+						Resume.FileName = e.File.Name;
+					}
+				}
+				catch (Exception ex)
+				{
+					Message = ex.Message;
+				}
+			}
+		}
+		else
+		{
+			Message = "Файл не вибрано.";
+		}
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		if (Resume.MimeType != null && Resume.FileName != null && Resume.Data != null)
+		{
+			AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+			System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+			if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("JobCandidate"))
+			{
+				string? userId = userManager.GetUserId(user);
+				using (ApplicationDbContext? dbContext = dbContextFactory.CreateDbContext())
+				{
+					JobCandidate? jobCandidate = await dbContext.JobCandidates
+						.FirstOrDefaultAsync(j => j.ApplicationUserId == userId);
+					if (jobCandidate != null)
+					{
+						Resume? resumeExists = await dbContext.Resumes
+							.FirstOrDefaultAsync(r => r.JobCandidateId == jobCandidate.Id);
+						if (resumeExists != null)
+						{
+							Message = "Резюме вже додане.";
+						}
+						else
+						{
+							Resume.JobCandidateId = jobCandidate.Id;
+							try
+							{
+								dbContext.Resumes.Add(Resume);
+								await dbContext.SaveChangesAsync();
+							}
+							catch (Exception ex)
+							{
+								Message = ex.Message;
+							}
+						}
+					}
+				}
+				if (Message == "")
+				{
+					Message = "Резюме вивантажене.";
+					navigationManager.NavigateTo("/resume/curriculumvitae");
+				}
+			}
+		}
+		else
+		{
+			Message = "Потрібно вибрати файл.";
+		}
+	}
+
+	private sealed class InputModel
+	{
+		[Required(ErrorMessage = "Потрібно вибрати файл.")]
+		public IFormFile? File { get; set; }
+	}
+}

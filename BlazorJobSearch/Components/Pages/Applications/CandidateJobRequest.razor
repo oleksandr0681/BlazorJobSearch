@@ -1,0 +1,62 @@
+﻿@page "/applications/candidatejobrequest/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "JobCandidate")]
+
+<PageTitle>Заявка на вакансію</PageTitle>
+
+<h1>Заявка на вакансію</h1>
+
+<button class="btn btn-primary" title="Змінити." @onclick="NavigateJobApplications">
+    Заявки
+</button>
+
+@if (JobApplication != null && JobApplication.Vacancy != null 
+    && JobApplication.Vacancy.Employer != null && JobApplication.JobCandidate != null)
+{
+    <h2>@JobApplication.Vacancy.Job</h2>
+    <p>
+        <a href="@("/employer/employer/"+JobApplication.Vacancy.Employer.Id)">
+            @JobApplication.Vacancy.Employer.Name
+        </a>
+    </p>
+    <p>Створено @JobApplication.Created.ToString()</p>
+    <p>Переглянуто @JobApplication.Viewed.ToString()</p>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private JobApplication? JobApplication { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+        {
+            JobApplication = await dbContext.JobApplications
+                .Include(j => j.JobCandidate).Include(j => j.Vacancy)
+                .Include(j => j.Vacancy.Employer).FirstOrDefaultAsync(j => j.Id == Id);
+        }
+    }
+
+    private void NavigateJobApplications()
+    {
+        navigationManager.NavigateTo("/jobcandidate/applications");
+    }
+}

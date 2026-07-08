@@ -1,0 +1,123 @@
+﻿@page "/employer/delete/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using BlazorJobSearch.Data
+@using BlazorJobSearch.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components; @* Використовуєься для NavigationManager. *@
+@using Microsoft.AspNetCore.Components.Web; @* Використовуєься для @onclick. *@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode; @* Використовуєься для @onclick. *@
+
+@inject AuthenticationStateProvider authenticationStateProvider;
+@inject IDbContextFactory<ApplicationDbContext> dbContextFactory;
+@inject UserManager<ApplicationUser> userManager;
+@inject NavigationManager navigationManager;
+@* rendermode InteractiveServer Використовуєься для @onclick. *@
+@rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Employer")]
+
+<PageTitle>Компанія</PageTitle>
+
+<h1>Вилучення компанії</h1>
+
+@if (Model != null)
+{
+	<h3>Ви впевнені, що хочете вилучити @Model.Name?</h3>
+	<br />
+	<EditForm Model="Model" OnValidSubmit="Submit" FormName="DeleteCompany">
+		<DataAnnotationsValidator />
+		<ValidationSummary />
+		<input type="hidden" @bind-value="Model.Id" />
+		<input type="hidden" @bind-value="Model.ApplicationUserId" />
+		<input type="hidden" @bind-value="Model.Name" />
+		<input type="hidden" @bind-value="Model.Description" />
+		<input type="hidden" @bind-value="Model.History" />
+		<input type="hidden" @bind-value="Model.Settlement" />
+		<input type="hidden" @bind-value="Model.Address" />
+		<input type="hidden" @bind-value="Model.TelephoneNumber" />
+		<input type="hidden" @bind-value="Model.Email" />
+		<div class="form-group">
+			<br />
+			<input type="submit" value="Вилучити" class="btn btn-danger" />
+			<button type="reset" class="btn btn-secondary" @onclick="Navigate">Скасувати</button>
+			<br />
+		</div>
+	</EditForm>
+}
+<p>@Message</p>
+
+@code {
+	[Parameter]
+	public int Id { get; set; }
+
+	[SupplyParameterFromForm(FormName = "DeleteCompany")]
+	private Employer? Model { get; set; }
+
+	private string? Message { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		await base.OnInitializedAsync();
+		using (ApplicationDbContext dbContext = await dbContextFactory.CreateDbContextAsync())
+		{
+			Model = await dbContext.Employers.FindAsync(Id);
+		}
+	}
+
+	private async Task Submit()
+	{
+		Message = "";
+		AuthenticationState? authState = await authenticationStateProvider
+			.GetAuthenticationStateAsync();
+		System.Security.Claims.ClaimsPrincipal? user = authState?.User;
+		if (user?.Identity is not null && user.Identity.IsAuthenticated && user.IsInRole("Employer"))
+		{
+			string? userId = userManager.GetUserId(user);
+			if (Model != null && Model.ApplicationUserId != userId)
+			{
+				Message = "У вас нема доступу до цього ресурсу.";
+				navigationManager.NavigateTo("/AccessDenied");
+			}
+			using (ApplicationDbContext dbContext = dbContextFactory.CreateDbContext())
+			{
+				try
+				{
+					IEnumerable<Vacancy> vacancies = dbContext.Vacancies
+						.Where(v => v.EmployerId == Model.Id);
+					if (vacancies != null)
+					{
+						foreach (Vacancy vacancy in vacancies)
+						{
+							IEnumerable<JobApplication> jobApplications = dbContext.JobApplications
+							.Where(j => j.VacancyId == vacancy.Id);
+							if (jobApplications != null)
+							{
+								foreach (JobApplication jobApplication in jobApplications)
+								{
+									dbContext.JobApplications.Remove(jobApplication);
+								}
+								await dbContext.SaveChangesAsync();
+							}
+						}
+					}
+					dbContext.Employers.Remove(Model!);
+					await dbContext.SaveChangesAsync();
+				}
+				catch (Exception ex)
+				{
+					Message = ex.Message + " " + ex.InnerException;
+				}
+			}
+			if (Message == "")
+			{
+				navigationManager.NavigateTo("/employer/employer");
+			}
+		}
+	}
+
+	private void Navigate()
+	{
+		navigationManager.NavigateTo("/employer/employer");
+	}
+}
