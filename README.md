@@ -1,6 +1,6 @@
 # JobSearch
 
-Сервіс для пошуку робот. 
+Сервіс для пошуку роботи. 
 
 Створено за допомогою **Blazor**, **T-SQL**, **Entity Framework Core**, і **ASP.NET Core Identity** для автентифікації.
 
@@ -24,7 +24,7 @@ Debug - Start Debugging
 
 <img width="1365" height="696" alt="Screenshot 2026-07-08 180613" src="https://github.com/user-attachments/assets/95e698f4-0800-4fe4-9e04-0216a0cbc984" />
 
-При першому запуску з'являться діалогові вікні "Trust ASP.NET Core SSL Certificate", "Попередження системи безпеки". Потрібно вибрати "Yes" ("Так").
+При першому запуску з'являться діалогові вікна "Trust ASP.NET Core SSL Certificate", "Попередження системи безпеки". Потрібно вибрати "Yes" ("Так").
 
 <img width="575" height="225" alt="1" src="https://github.com/user-attachments/assets/fdce5aae-34fb-4c92-a81c-88b25c2f37da" />
 
@@ -34,7 +34,7 @@ Debug - Start Debugging
 
 <img width="1365" height="717" alt="Screenshot 2026-07-08 181203" src="https://github.com/user-attachments/assets/359687e4-b462-45d3-8487-5a67ce33442c" />
 
-При запуску web-застосунку створюється база даних. У базі даних свторюються ролі Employer і JobCandidate.
+При запуску web-застосунку створюється база даних. У базі даних створюються ролі Employer і JobCandidate.
 
 ## Можливості
 
